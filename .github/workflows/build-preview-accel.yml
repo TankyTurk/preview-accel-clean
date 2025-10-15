@@ -1,0 +1,47 @@
+name: build-preview-accel
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-preview-accel.yml'
+      - 'native/preview_accel/**'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: MSVC (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Configure (no Qt, fetch pybind11)
+        working-directory: native/preview_accel
+        run: |
+          cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        working-directory: native/preview_accel/build
+        run: cmake --build . --config Release --target preview_accel
+
+      - name: Collect artifact
+        shell: pwsh
+        run: |
+          $pyd = Get-ChildItem -Recurse native/preview_accel/build -Filter preview_accel.pyd | Select-Object -First 1
+          if (-not $pyd) { throw "preview_accel.pyd not found" }
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item $pyd.FullName out/
+          Write-Host "Copied -> out\$($pyd.Name)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview_accel-pyd-python312
+          path: out/preview_accel.pyd
